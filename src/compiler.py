@@ -5,12 +5,14 @@ import subprocess
 import shutil
 from pathlib import Path
 
-# Professional Imports
+# Professional Imports - Move all imports to the top so PyInstaller finds them
 import lexer
 from parser import Parser
 from semantic import analyze
 from ir import generate_ir
 from codegen import generate_c_code
+import nl_ast  # Moved to top
+import symbols # Moved to top
 
 def _print_tokens(tokens):
     print("=== TOKENS ===")
@@ -19,53 +21,32 @@ def _print_tokens(tokens):
     print()
 
 def _print_ast(node, indent: int = 0):
-    """Pretty-print the AST as a tree."""
-    from nl_ast import (
-        Program, VarDeclaration, Assignment, PrintStatement,
-        Identifier, NumberLiteral, BinaryOp, Block,
-        IfStatement, WhileStatement,
-    )
+    """Pretty-print the AST as a tree using nl_ast nodes."""
     pad = "  " * indent
-    if isinstance(node, (Program, Block)):
-        print(f"{pad}{'Program' if isinstance(node, Program) else 'Block'}")
+    # Use the nl_ast module directly to avoid internal ImportErrors
+    if isinstance(node, (nl_ast.Program, nl_ast.Block)):
+        print(f"{pad}{'Program' if isinstance(node, nl_ast.Program) else 'Block'}")
         for stmt in node.statements:
             _print_ast(stmt, indent + 1)
-    elif isinstance(node, (VarDeclaration, Assignment)):
+    elif isinstance(node, (nl_ast.VarDeclaration, nl_ast.Assignment)):
         print(f"{pad}{type(node).__name__} {node.name.name}")
         _print_ast(node.expr, indent + 1)
-    elif isinstance(node, PrintStatement):
+    elif isinstance(node, nl_ast.PrintStatement):
         print(f"{pad}Print")
         _print_ast(node.expr, indent + 1)
-    elif isinstance(node, Identifier):
+    elif isinstance(node, nl_ast.Identifier):
         print(f"{pad}Identifier {node.name}")
-    elif isinstance(node, NumberLiteral):
+    elif isinstance(node, nl_ast.NumberLiteral):
         print(f"{pad}NumberLiteral {node.value}")
-    elif isinstance(node, BinaryOp):
+    elif isinstance(node, nl_ast.BinaryOp):
         print(f"{pad}BinaryOp {node.op}")
         _print_ast(node.left, indent + 1)
         _print_ast(node.right, indent + 1)
-    elif isinstance(node, IfStatement):
-        print(f"{pad}If")
-        _print_ast(node.condition, indent + 1)
-        _print_ast(node.then_block, indent + 1)
-        if getattr(node, "else_block", None):
-            print(f"{pad}else")
-            _print_ast(node.else_block, indent + 1)
-    elif isinstance(node, WhileStatement):
-        print(f"{pad}While")
-        _print_ast(node.condition, indent + 1)
-        _print_ast(node.body, indent + 1)
-
-def _print_ir(ir_program):
-    print("=== IR ===")
-    for instr in ir_program.instructions:
-        print(instr)
-    print()
 
 def _print_symbols(symbol_table):
-    from symbols import SymbolTable
     print("=== SYMBOL TABLE (global scope) ===")
-    if not isinstance(symbol_table, SymbolTable):
+    # Safety check for symbol table objects
+    if not hasattr(symbol_table, 'symbols'):
         print(symbol_table)
         return
     for name, sym in symbol_table.symbols.items():
@@ -73,9 +54,10 @@ def _print_symbols(symbol_table):
     print()
 
 def compile_source(source_path, **kwargs):
-    src_path = Path(source_path)
+    src_path = Path(source_path).absolute() # Use absolute path for user reliability
     if not src_path.exists():
-        raise FileNotFoundError(f"Source file not found: {src_path}")
+        print(f"Error: Source file not found at {src_path}")
+        return
 
     text = src_path.read_text(encoding="utf-8")
 
@@ -95,54 +77,51 @@ def compile_source(source_path, **kwargs):
         print("=== AST ==="); _print_ast(ast_program); print()
 
     # 3. Semantic Analysis
-    symbols = analyze(ast_program)
-    if kwargs.get('dump_symbols'): _print_symbols(symbols)
+    sym_table = analyze(ast_program)
+    if kwargs.get('dump_symbols'): _print_symbols(sym_table)
 
     # 4. IR Generation
     ir_program = generate_ir(ast_program)
-    if kwargs.get('dump_ir'): _print_ir(ir_program)
+    if kwargs.get('dump_ir'):
+        print("=== IR ===")
+        for instr in ir_program.instructions: print(instr)
 
     # 5. C Code Generation
     c_code = generate_c_code(ir_program)
+    # Ensure build directory exists in the same folder as the input file
     build_dir = src_path.parent / "build"
-    build_dir.mkdir(exist_ok=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    
     c_out = build_dir / (src_path.stem + ".c")
     c_out.write_text(c_code, encoding="utf-8")
     print(f"C code written to: {c_out}")
 
-    # 6. Compilation (FIXED for End-Users)
+    # 6. Compilation Check
     compiler_bin = shutil.which("gcc") or shutil.which("clang")
-    
     if not compiler_bin:
-        print("\n[!] ERROR: C compiler (gcc) not found.")
-        print("To run .nl files, please install MinGW/GCC and add it to your PATH.")
+        print("\n[!] ERROR: GCC compiler not found in system PATH.")
+        print("Please install MinGW/GCC so nlc can build your program.")
         return 
 
     exe_path = build_dir / (src_path.stem + (".exe" if os.name == "nt" else ""))
-    cmd = [compiler_bin, str(c_out), "-o", str(exe_path)]
     
     try:
-        # Run GCC to compile
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        # Compile command
+        subprocess.run([compiler_bin, str(c_out), "-o", str(exe_path)], check=True)
+        print(f"Executable created: {exe_path}")
         
-        if result.returncode == 0:
-            print(f"Executable created: {exe_path}")
-            # AUTO-RUN LOGIC
-            if exe_path.exists():
-                print("\n--- Running Output ---")
-                subprocess.run([str(exe_path)], shell=True)
-                print("\n-----------------------")
+        # Run command
+        print("\n--- Running Output ---")
+        subprocess.run([str(exe_path)], shell=True)
+        print("\n-----------------------")
         
-    except FileNotFoundError:
-        print("\n[!] Error: The system could not find the compiler executable.")
-    except subprocess.CalledProcessError as e:
-        print("\n[!] GCC Compilation Error:")
-        print(e.stderr)
+    except Exception as e:
+        print(f"\n[!] Compilation/Execution Error: {e}")
 
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: python compiler.py <file.nl> [--tokens] [--ast] [--ir] [--symbols]")
+        print("Usage: nlc <file.nl> [--tokens] [--ast] [--ir] [--symbols]")
         return
     
     compile_source(
