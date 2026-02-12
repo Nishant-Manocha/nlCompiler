@@ -9,23 +9,29 @@ A lightweight, hand-written compiler for the NL language. This tool translates `
 
 ---
 
-## 🛠️ Installation (One-Time Setup)
+A professional-grade compiler for the NL language featuring a full pipeline: Lexing → Parsing → Semantic Analysis → IR → C-Codegen → Execution.
 
-To use the `nlc` command anywhere on your Windows machine without typing long paths:
+## 🛠️ Debugging Intermediate Results
 
-1. **Download** this repository to a folder (e.g., `C:\NLCompiler`).
-2. **Right-click `install.bat`** and select **Run as Administrator**.
-3. **Restart** your terminal or VS Code to apply the changes.
+Use these flags to inspect how the compiler processes your code.
 
-*This script adds the compiler to your Windows PATH so you don't have to use `.\` or activation scripts.*
+### Lexical Analysis (Tokens)
+`nlc file.nl --tokens`
+* **Purpose**: Shows how the source text is broken into atomic units.
+* **Example Output**: `NUMBER 2 (line 1, col 7)`.
+
+### Syntax and Semantics Analysis(AST)
+`nlc file.nl --ast`
+* **Purpose**: Checks variable validity and Visualizes the hierarchical tree structure of your code.
+* **Structure**: `Program -> Print -> NumberLiteral`.
+
+### IR
+`nlc file.nl --symbols --ir`
+* **Purpose**: shows the Intermediate Representation.
 
 ---
 
-## 💻 How to Use
+## 🚀 Installation & Usage
 
-You can now create an `.nl` file **anywhere** on your computer and run it.
-
-1. Create a file named `hello.nl`:
-   ```nl
-   let x = 10;
-   print(x + 5);
+1. **Setup**: Run `install.bat` as Administrator to add `nlc` to your Windows PATH.
+2. **Compile & Run**: Type `nlc file.nl` to generate C code, compile with GCC, and execute instantly.

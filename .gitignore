@@ -13,7 +13,7 @@ debug.log
 
 # Generated C and EXE files
 *.c
-*.exe
+# *.exe
 
 # OS files
 .DS_Store
