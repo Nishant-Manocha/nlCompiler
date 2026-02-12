@@ -5,7 +5,7 @@ import subprocess
 import shutil
 from pathlib import Path
 
-# Fixed imports to match your project structure
+# Professional Imports
 import lexer
 from parser import Parser
 from semantic import analyze
@@ -26,15 +26,12 @@ def _print_ast(node, indent: int = 0):
         IfStatement, WhileStatement,
     )
     pad = "  " * indent
-    if isinstance(node, Program) or isinstance(node, Block):
+    if isinstance(node, (Program, Block)):
         print(f"{pad}{'Program' if isinstance(node, Program) else 'Block'}")
         for stmt in node.statements:
             _print_ast(stmt, indent + 1)
-    elif isinstance(node, VarDeclaration):
-        print(f"{pad}VarDeclaration {node.name.name}")
-        _print_ast(node.expr, indent + 1)
-    elif isinstance(node, Assignment):
-        print(f"{pad}Assignment {node.name.name}")
+    elif isinstance(node, (VarDeclaration, Assignment)):
+        print(f"{pad}{type(node).__name__} {node.name.name}")
         _print_ast(node.expr, indent + 1)
     elif isinstance(node, PrintStatement):
         print(f"{pad}Print")
@@ -82,7 +79,7 @@ def compile_source(source_path, **kwargs):
 
     text = src_path.read_text(encoding="utf-8")
 
-    # 1. Lexing (FIXED: Uses Lexer class instead of tokenize function)
+    # 1. Lexing
     _lexer = lexer.Lexer(text)
     tokens = []
     while True:
@@ -113,21 +110,34 @@ def compile_source(source_path, **kwargs):
     c_out.write_text(c_code, encoding="utf-8")
     print(f"C code written to: {c_out}")
 
-    # 6. Compilation
+    # 6. Compilation (FIXED for End-Users)
     compiler_bin = shutil.which("gcc") or shutil.which("clang")
+    
     if not compiler_bin:
-        print("No C compiler found."); return
+        print("\n[!] ERROR: C compiler (gcc) not found.")
+        print("To run .nl files, please install MinGW/GCC and add it to your PATH.")
+        return 
 
     exe_path = build_dir / (src_path.stem + (".exe" if os.name == "nt" else ""))
     cmd = [compiler_bin, str(c_out), "-o", str(exe_path)]
-    result = subprocess.run(cmd)
     
-    if result.returncode == 0:
-        print(f"Executable created: {exe_path}")
-        # AUTO-RUN LOGIC
-        print("\n--- Running Output ---")
-        subprocess.run([str(exe_path)], shell=True)
-        print("-----------------------")
+    try:
+        # Run GCC to compile
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print(f"Executable created: {exe_path}")
+            # AUTO-RUN LOGIC
+            if exe_path.exists():
+                print("\n--- Running Output ---")
+                subprocess.run([str(exe_path)], shell=True)
+                print("\n-----------------------")
+        
+    except FileNotFoundError:
+        print("\n[!] Error: The system could not find the compiler executable.")
+    except subprocess.CalledProcessError as e:
+        print("\n[!] GCC Compilation Error:")
+        print(e.stderr)
 
 def main():
     args = sys.argv[1:]
